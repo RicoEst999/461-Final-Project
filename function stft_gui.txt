@@ -1,0 +1,51 @@
+function stft_gui_slider()
+    [x, fs] = audioread('sent001.wav'); 
+    x = x(:,1);  
+   % default_win = 256;
+    %making it default window of 20ms 
+    default_win = round(.02*fs);
+    f = figure('Name','STFT Viewer with Window Slider');
+
+    min = 64;
+    max = 1024;
+
+    ax1 = subplot(2,1,1);
+    t = (0:length(x)-1)/fs;
+    plot(ax1, t, x);
+    title(ax1, 'Original Audio Waveform');
+    xlabel(ax1, 'Time (s)');
+    ylabel(ax1, 'Amplitude');
+
+    ax2 = subplot(2,1,2);
+    plotSpectrogram(default_win); 
+
+    %slider to control window size
+    uicontrol('Style','text','String','Window Size:','Units','normalized');
+%slider that moves from 64 to 1024, starts at the default window
+    slider = uicontrol('Style','slider','Min', 64, 'Max', 1024, 'Value', default_win,'SliderStep', [32/(max-min) (2*32)/(max-min)],'Units','normalized','Callback', @updateSTFT);
+%slider funtion in matlab 
+    function updateSTFT(~, ~)
+        win = round(slider.Value);
+        plotSpectrogram(win);
+    end
+
+    function plotSpectrogram(win)
+        axes(ax2); cla;
+        overlap = round(win / 2);
+        nfft = 1024;
+        [S,F,T] = spectrogram(x, hamming(win), overlap, nfft, fs);
+        imagesc(T, F, 20*log10(abs(S)));
+        axis xy;
+        %ylim([0 fs/2]);  % Optional frequency range limit
+        title(sprintf('Spectrogram (Window = %d samples)', win));
+        xlabel('Time (s)');
+        ylabel('Frequency (Hz)');
+        colorbar;
+    end
+end
+
+
+%starting at a window of 256 samples 
+%duration is 256/fs = 16ms
+
+%doing a standard window of 20ms i get a sample of 441 
