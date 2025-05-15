@@ -84,6 +84,12 @@ function Bandpass_GUI_Filter
         t2.String = sprintf('%.0f Hz', high_cut);
 
         if high_cut <= low_cut + 50
+        %%
+        % 
+        %   for x = 1:10
+        %       disp(x)
+        %   end
+        % 
             high_cut = low_cut + 50;
             if high_cut >= fs/2 - 1
                 high_cut = fs/2 - 1;
