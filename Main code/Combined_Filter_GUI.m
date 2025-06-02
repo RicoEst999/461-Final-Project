@@ -3,15 +3,59 @@ function Combined_Filter_GUI()
 % Interactive GUI for applying a band-pass filter to a speech signal.
 % Lets the user adjust low and high cutoff frequencies via sliders
 % and hear the effect in real time.
-% x, fs       : Audio signal and sampling rate
-% t           : Time vector for plotting
-% s1, s2      : Handles for low and high cutoff sliders
-% t1, t2      : Text boxes showing selected cutoff frequencies
-% ax          : Axes object for waveform display
-% h_plot      : Handle for plot of the filtered waveform
-% filtered_audio : The signal after filtering
-% default_low_cut, default_high_cut : Initial cutoff values (speech band)
-
+% 
+% VARIABLE LIST BY MODULE:
+%
+% Main Function: Combined_Filter_GUI()
+%   filtered_audio : Audio signal after bandpass filtering (output from bandpass_gui)
+%   fs             : Sampling frequency of the audio file
+%
+% Bandpass GUI Function: bandpass_gui()
+%   x                : Original input audio signal loaded from file
+%   fs               : Sampling frequency of the audio signal
+%   t                : Time axis vector for plotting the waveform
+%   f                : Handle to the GUI figure for the bandpass filter
+%   ax               : Handle to the axes for plotting the waveform
+%   h_plot           : Handle to the plot object, used for updating the waveform display
+%   default_low_cut  : Default low cutoff frequency for the bandpass filter (Hz)
+%   default_high_cut : Default high cutoff frequency for the bandpass filter (Hz)
+%   s1               : Handle to the slider for adjusting the low cutoff frequency
+%   s2               : Handle to the slider for adjusting the high cutoff frequency
+%   t1               : Handle to the text label displaying the low cutoff frequency value
+%   t2               : Handle to the text label displaying the high cutoff frequency value
+%   b                : Numerator coefficients of the Butterworth bandpass filter
+%   a                : Denominator coefficients of the Butterworth bandpass filter
+%   filtered_audio   : Audio signal after applying the bandpass filter (output of this function)
+%   low_cut          : Current low cutoff frequency from slider s1 (within updateFilter)
+%   high_cut         : Current high cutoff frequency from slider s2 (within updateFilter)
+%   Wn               : Normalized cutoff frequencies for butter() (within updateFilter)
+%
+% STFT GUI Function: stft_gui_slider(x, fs)
+%   x              : Input audio signal (this is `filtered_audio` from bandpass_gui)
+%   fs             : Sampling frequency of the input audio signal
+%   clean_audio    : Denoised audio signal after STFT processing and ISTFT
+%   default_win    : Default window size for STFT in samples (approx. 30 ms)
+%   min_win        : Minimum allowed window size for STFT (samples)
+%   max_win        : Maximum allowed window size for STFT (samples, clamped by signal length or 1024)
+%   fig1           : Handle to the GUI figure for displaying the spectrogram
+%   axSpec         : Handle to the axes for the spectrogram plot
+%   slider         : Handle to the UI control (slider) for adjusting the STFT window size
+%   fig2           : Handle to the GUI figure for displaying time-domain audio plots
+%   Orig           : Handle to the subplot for the original (input to STFT) waveform
+%   Clean          : Handle to the subplot for the cleaned (output of STFT) waveform
+%   t              : Time axis vector for the original audio waveform plot
+%   win            : Current STFT window size in samples, from slider (within updateSTFT)
+%   maxAllowedWin  : Maximum allowed window size to prevent errors (within updateSTFT)
+%   nfft           : FFT length for the spectrogram and ISTFT (next power of 2)
+%   overlap        : Hop size for STFT/ISTFT, typically 50% of the window size
+%   S              : STFT matrix of the input signal
+%   F              : Frequency vector for the spectrogram
+%   T              : Time vector for the spectrogram
+%   mag            : Magnitude of the STFT matrix (abs(S))
+%   threshold      : Threshold value for magnitude masking (based on median of magnitudes)
+%   mask           : Binary mask created by comparing magnitudes to the threshold
+%   masked_S       : STFT matrix after applying the binary mask
+%   t_clean        : Time axis vector for the cleaned audio waveform plot
 
     % PART 1: BANDPASS GUI 
     [filtered_audio, fs] = bandpass_gui();  % Run and get output
@@ -27,8 +71,10 @@ end
 
 %% --------- BANDPASS GUI FUNCTION -----------
 function [filtered_audio, fs] = bandpass_gui()
-    [x, fs] = audioread('sent001.wav');% Load noisy speech file
-    x = x(:, 1);% Use only one channel if stereo
+    %% combined audio 
+    [x, fs] = audioread('Police Siren.wav');%loading first audio 
+    x = x(:, 1);% Use only one channel if stereo (mono)
+
     t = (0:length(x)-1) / fs;% Time axis for plotting
     % Set default cutoff frequencies (typical speech band)
     default_low_cut = 300;
@@ -181,59 +227,45 @@ function stft_gui_slider(x, fs)
 
     % Slider callback (with sound)
     function sliderChanged(~, ~)
-        updateSTFT(round(slider.Value), true);
+        updateSTFT(round(slider.Value), false);
     end
 
     % Core plotfunction
-    function updateSTFT(win, doPlay)
-            if isempty(x) || length(x) < 64
-        warning('Signal too short.');
-        return;
-            end
-            win = round(win);
-    win = min(win, length(x));
+    function updateSTFT(varargin)
+    win = round(slider.Value);
+    maxAllowedWin = 4096;        % <-- change as needed
+    win = min(win, maxAllowedWin);
 
+       
+       nfft = 2^( nextpow2( 2*(win-1) ) );  % Ensure FFT length is valid
         overlap = round(win / 2);
-       nfft = max(1024, 2^nextpow2(win));   % Ensure FFT length is valid
 
-       try
             [S,F,T] = spectrogram(x, hamming(win), overlap, nfft, fs);
-        catch err
-            warning("Spectrogram failed: " + err.message);
-            return;
-       end 
-
-        if size(S,1) < win
-        warning('STFT result too short for ISTFT.');
-        return;
-        end
+     
 
         mag = abs(S);%computing the magnitude of STFT
         %based mask
-        threshold = median(mag(:)) * 0.5;
+        threshold =0.8* median(mag(:));
         mask = mag > threshold;
         masked_S = S .* mask;
 
         % Plot spectrogram (Figure 1)
         figure(fig1); 
-        axes(axSpec); cla;
+        axes(axSpec); cla(axSpec);
         imagesc(T, F, 20*log10(abs(S))); 
         axis xy;
         title(sprintf('Spectrogram (Window = %d samples)', win));
         xlabel('Time (s)');
         ylabel('Frequency (Hz)');
         colorbar;
+         
+       clean_audio = istft(masked_S, fs, ...
+    'Window',            hamming(win),  ...
+    'OverlapLength',     overlap,       ...
+    'FFTLength',         nfft,          ...
+    'ConjugateSymmetric', true);
 
-          try
-        clean_audio = istft(masked_S, fs, ...
-            'Window', hamming(win), ...
-            'OverlapLength', overlap, ...
-            'FFTLength', nfft);
         clean_audio = real(double(clean_audio));
-    catch err
-        warning("ISTFT failed: " + err.message);
-        return;
-          end
        
         % Plot cleaned audio (Figure 2)
         t_clean = (0:length(clean_audio)-1)/fs;
@@ -244,13 +276,15 @@ function stft_gui_slider(x, fs)
         xlabel('Time (s)');
         ylabel('Amplitude');
          
-     if doPlay
         sound(clean_audio, fs);
-     end
+     
     end
 end
 
 
-%when the error appear instead of crashing we get a warnning that the STFT
-%dont have enough freq bins to construct a signal via ISTFT, then we we can
-%try other values to safely choose other options for window size
+
+
+%okay so now window error isn't going to happen, we are now able to get all
+%STFT options, for a clear audio we want the spectrogramt o be all blue but
+%again i don't think we can create a perfect clear audio and mostly with the
+% motor and the low men voice just too much of the same frequency 
