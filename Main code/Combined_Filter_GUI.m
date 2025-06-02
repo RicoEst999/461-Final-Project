@@ -72,7 +72,11 @@ end
 %% --------- BANDPASS GUI FUNCTION -----------
 function [filtered_audio, fs] = bandpass_gui()
     %% combined audio 
+<<<<<<< HEAD:Main code/Combined_Filter_GUI.m
     [x, fs] = audioread('Police Siren.wav');%loading first audio 
+=======
+    [x, fs] = audioread('white.wav');%loading first audio 
+>>>>>>> 610a1fd1a03bc6ab575e2a7e5d0e62e1fad0da2f:Main code/Combined_Filter_GUI.txt
     x = x(:, 1);% Use only one channel if stereo (mono)
 
     t = (0:length(x)-1) / fs;% Time axis for plotting
@@ -188,43 +192,46 @@ end
 
 %% --------- STFT GUI FUNCTION -----------
 function stft_gui_slider(x, fs)
-%loads audio file and displaays:
-% - spectogram (with gui that adjust the window by 32 or just a slider)
-% - Time domain waveform of the original and cleaned signal 
-% - applying a magnitude threshold masking to STFT
+    % loads audio (x,fs) and displays:
+    %  - spectrogram (with a slider over window size)
+    %  - original and “cleaned” time‐domain waveforms
+    %  - uses a 0.5×median‐based soft/Wiener‐type mask so speech isn't choppy
 
-    clean_audio = [];
-    default_win = round(.03 * fs);  %making it default window of 30ms
-    min_win = 64;
-    max_win = min(1024, length(x));
+    default_win = 1024;                 % default window length in samples
+    min_win     = 256;
+    max_win     = min(2048, length(x));
 
-    %Figure 1: Spectrogram
-    fig1 = figure('Name','STFT Window Slider','Position',[200, 200, 800, 600]);
+    % FIGURE 1: Spectrogram + Slider
+    fig1   = figure('Name','STFT Window Slider','Position',[200,200,800,600]);
     axSpec = axes('Parent', fig1);
 
-    %slider that moves from 64 to 1024, starts at the default window
-    uicontrol('Parent', fig1, 'Style','text','String','Window Size:', ...
-              'Units','normalized','Position',[.05 .02 .15 .05]);
+    % Slider label
+    uicontrol('Parent', fig1, 'Style','text', ...
+              'String','Window Size (samples):', ...
+              'Units','normalized', 'Position',[0.05 0.02 0.20 0.05]);
+
+    % Slider (continuous, but will round to nearest multiple of 32 below)
     slider = uicontrol('Parent', fig1, 'Style','slider', ...
               'Min', min_win, 'Max', max_win, 'Value', default_win, ...
-              'SliderStep', [32/(max_win-min_win) (2*32)/(max_win-min_win)], ...
-              'Units','normalized', 'Position',[0.32 0.02 0.6 0.05], ...
+              'SliderStep',[32/(max_win-min_win)  (32)/(max_win-min_win)], ...
+              'Units','normalized', 'Position',[0.32 0.02 0.60 0.05], ...
               'Callback', @sliderChanged);
 
-    % Figure 2: Time-Domain Plots
-    fig2 = figure('Name','Time Domain Audio','Position',[1020, 200, 800, 600]);
+    % FIGURE 2: Time‐Domain Plots
+    fig2 = figure('Name','Time Domain Audio','Position',[1020,200,800,600]);
     Orig = subplot(2,1,1, 'Parent', fig2);
     Clean = subplot(2,1,2, 'Parent', fig2);
 
-    % original waveform plot
+    % Plot original waveform once
     t = (0:length(x)-1)/fs;
     plot(Orig, t, x);
-    title(Orig, 'Original Audio Waveform');
-    xlabel(Orig, 'Time (s)');
-    ylabel('Amplitude');
+    title(Orig,'Original Audio Waveform');
+    xlabel(Orig,'Time (s)');
+    ylabel(Orig,'Amplitude');
 
-    updateSTFT(round(slider.Value), false);
+    updateSTFT();
 
+<<<<<<< HEAD:Main code/Combined_Filter_GUI.m
     % Slider callback (with sound)
     function sliderChanged(~, ~)
         updateSTFT(round(slider.Value), false);
@@ -278,13 +285,74 @@ function stft_gui_slider(x, fs)
          
         sound(clean_audio, fs);
      
+=======
+    % Slider callback simply calls updateSTFT
+    function sliderChanged(~,~)
+        updateSTFT();
+    end
+
+    function updateSTFT()
+        % slider and snap to multiple of 32 samples
+        raw_win = round(slider.Value);
+        win = 32 * round(raw_win/32);
+        win = max(min(win, max_win), min_win);
+
+        % nfft 
+        nfft = 2^nextpow2(2*(win - 1));
+
+        % 75% overlap
+        overlap = round(0.75 * win);
+
+        % one‐sided STFT on x
+        [S, F, T] = spectrogram(x, hamming(win), overlap, nfft, fs);
+
+        % Soft/Wiener‐type mask (0.5×median)
+        mag = abs(S);
+        thr = 0.5 * median(mag(:));
+        gain = (mag.^2) ./ (mag.^2 + thr^2 + eps);  
+        S_mask = S .* gain;
+
+        % spectrogram plot (magnitude in dB)
+        figure(fig1);
+        axes(axSpec); cla(axSpec);
+        imagesc(T, F, 20*log10(mag + eps));
+        axis(axSpec,'xy');
+        title(axSpec, sprintf('Spectrogram (Window = %d samples)', win));
+        xlabel(axSpec,'Time (s)');
+        ylabel(axSpec,'Frequency (Hz)');
+        colorbar(axSpec);
+
+        % Inverse STFT (one‐sided) to get clean_audio
+        clean_audio = istft(S_mask, fs, ...
+              'Window',            hamming(win), ...
+              'OverlapLength',     overlap, ...
+              'FFTLength',         nfft, ...
+              'ConjugateSymmetric', true);
+        clean_audio = real(double(clean_audio));
+
+        % cleaned waveform plot
+        t_clean = (0:length(clean_audio)-1)/fs;
+        figure(fig2);
+        axes(Clean); cla(Clean);
+        plot(Clean, t_clean, clean_audio);
+        title(Clean,'Cleaned Audio After Soft Masking');
+        xlabel(Clean,'Time (s)');
+        ylabel(Clean,'Amplitude');
+
+        %Playback
+        sound(clean_audio, fs);
+>>>>>>> 610a1fd1a03bc6ab575e2a7e5d0e62e1fad0da2f:Main code/Combined_Filter_GUI.txt
     end
 end
 
 
 
 
+<<<<<<< HEAD:Main code/Combined_Filter_GUI.m
 %okay so now window error isn't going to happen, we are now able to get all
 %STFT options, for a clear audio we want the spectrogramt o be all blue but
 %again i don't think we can create a perfect clear audio and mostly with the
 % motor and the low men voice just too much of the same frequency 
+=======
+ 
+>>>>>>> 610a1fd1a03bc6ab575e2a7e5d0e62e1fad0da2f:Main code/Combined_Filter_GUI.txt
